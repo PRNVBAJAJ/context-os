@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/PRNVBAJAJ/context-os/internal/adapter"
 	"github.com/PRNVBAJAJ/context-os/internal/event"
 	"github.com/PRNVBAJAJ/context-os/internal/memory"
 	"github.com/PRNVBAJAJ/context-os/internal/project"
@@ -15,12 +16,27 @@ import (
 
 const maxDashboardEvents = 10
 
+type tab int
+
+const (
+	tabWorkflows tab = iota
+	tabMemories
+	tabProviders
+	tabEvents
+	tabCount
+)
+
+var tabNames = [tabCount]string{"Workflows", "Memories", "Providers", "Events"}
+
 var (
-	headerStyle  = lipgloss.NewStyle().Bold(true)
-	sectionStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	dimStyle     = lipgloss.NewStyle().Faint(true)
-	hintStyle    = lipgloss.NewStyle().Faint(true).MarginTop(1)
-	colWidth     = 20
+	headerStyle      = lipgloss.NewStyle().Bold(true)
+	activeTabStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Underline(true)
+	inactiveTabStyle = lipgloss.NewStyle().Faint(true)
+	sectionStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
+	dimStyle         = lipgloss.NewStyle().Faint(true)
+	hintStyle        = lipgloss.NewStyle().Faint(true).MarginTop(1)
+	cursorStyle      = lipgloss.NewStyle().Background(lipgloss.Color("236"))
+	colWidth         = 20
 )
 
 // Model is the Bubble Tea model for the Context OS dashboard.
@@ -30,6 +46,9 @@ type Model struct {
 	workflows []*workflow.Workflow
 	memories  []*memory.Memory
 	events    []*event.Event
+	providers []adapter.DetectionResult
+	activeTab tab
+	cursor    int
 	quitting  bool
 }
 
@@ -39,18 +58,25 @@ func New(
 	workflows []*workflow.Workflow,
 	memories []*memory.Memory,
 	events []*event.Event,
+	providers []adapter.DetectionResult,
 ) Model {
 	return Model{
 		project:   p,
 		workflows: workflows,
 		memories:  memories,
 		events:    events,
+		providers: providers,
 	}
 }
 
 // Quitting reports whether the model has received a quit signal.
-// Used by tests to verify key-press handling without a real terminal.
 func (m Model) Quitting() bool { return m.quitting }
+
+// ActiveTab returns the index of the currently active tab.
+func (m Model) ActiveTab() int { return int(m.activeTab) }
+
+// Cursor returns the current cursor position within the active tab.
+func (m Model) Cursor() int { return m.cursor }
 
 // Init satisfies tea.Model. No startup commands are needed — data is pre-loaded.
 func (m Model) Init() tea.Cmd { return nil }
@@ -63,9 +89,54 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c", "esc":
 			m.quitting = true
 			return m, tea.Quit
+		case "tab", "l":
+			m.activeTab = (m.activeTab + 1) % tabCount
+			m.cursor = 0
+		case "shift+tab", "h":
+			m.activeTab = (m.activeTab - 1 + tabCount) % tabCount
+			m.cursor = 0
+		case "1":
+			m.activeTab = tabWorkflows
+			m.cursor = 0
+		case "2":
+			m.activeTab = tabMemories
+			m.cursor = 0
+		case "3":
+			m.activeTab = tabProviders
+			m.cursor = 0
+		case "4":
+			m.activeTab = tabEvents
+			m.cursor = 0
+		case "j", "down":
+			if n := m.tabLen(); n > 0 {
+				m.cursor = min(m.cursor+1, n-1)
+			}
+		case "k", "up":
+			if m.cursor > 0 {
+				m.cursor--
+			}
 		}
 	}
 	return m, nil
+}
+
+// tabLen returns the number of navigable rows in the active tab.
+func (m Model) tabLen() int {
+	switch m.activeTab {
+	case tabWorkflows:
+		return len(m.workflows)
+	case tabMemories:
+		return len(m.memories)
+	case tabProviders:
+		return len(m.providers)
+	case tabEvents:
+		n := len(m.events)
+		if n > maxDashboardEvents {
+			n = maxDashboardEvents
+		}
+		return n
+	}
+	return 0
 }
 
 // View renders the dashboard. Returns an empty string once quitting to avoid
@@ -82,68 +153,133 @@ func (m Model) View() string {
 	b.WriteString(headerStyle.Render(fmt.Sprintf("  Context OS — %s (%s)", m.project.Name, m.project.RuntimeVersion)))
 	b.WriteString("\n")
 	b.WriteString(dimStyle.Render(fmt.Sprintf("  %s", m.project.RootPath)))
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
-	// Workflows section
-	b.WriteString("\n")
-	b.WriteString(sectionStyle.Render(fmt.Sprintf("  ── WORKFLOWS (%d) ", len(m.workflows))))
-	b.WriteString("\n")
-	if len(m.workflows) == 0 {
-		b.WriteString(dimStyle.Render("  No workflows started."))
-		b.WriteString("\n")
-	} else {
-		for _, wf := range m.workflows {
-			startedStr := ""
-			if wf.StartedAt != nil {
-				startedStr = wf.StartedAt.Format("2006-01-02T15:04Z")
-			}
-			fmt.Fprintf(&b, "  %s  %-*s  %-10s  %s\n",
-				wf.ID.String()[:8],
-				colWidth, wf.Name,
-				string(wf.Status),
-				startedStr,
-			)
+	// Tab bar
+	b.WriteString("  ")
+	for i := tab(0); i < tabCount; i++ {
+		label := fmt.Sprintf(" %s ", tabNames[i])
+		if i == m.activeTab {
+			b.WriteString(activeTabStyle.Render(label))
+		} else {
+			b.WriteString(inactiveTabStyle.Render(label))
+		}
+		if i < tabCount-1 {
+			b.WriteString(dimStyle.Render(" │ "))
 		}
 	}
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("  " + strings.Repeat("─", 60)))
+	b.WriteString("\n\n")
 
-	// Memories section
-	b.WriteString("\n")
-	b.WriteString(sectionStyle.Render(fmt.Sprintf("  ── MEMORIES (%d) ", len(m.memories))))
-	b.WriteString("\n")
-	if len(m.memories) == 0 {
-		b.WriteString(dimStyle.Render("  No memories recorded."))
-		b.WriteString("\n")
-	} else {
-		for _, mem := range m.memories {
-			fmt.Fprintf(&b, "  %-*s  %s\n", colWidth, mem.Key, mem.Title)
-		}
+	// Active tab content
+	switch m.activeTab {
+	case tabWorkflows:
+		m.renderWorkflows(&b)
+	case tabMemories:
+		m.renderMemories(&b)
+	case tabProviders:
+		m.renderProviders(&b)
+	case tabEvents:
+		m.renderEvents(&b)
 	}
 
-	// Recent events section
-	events := m.events
-	if len(events) > maxDashboardEvents {
-		events = events[len(events)-maxDashboardEvents:]
-	}
-	b.WriteString("\n")
-	b.WriteString(sectionStyle.Render(fmt.Sprintf("  ── RECENT EVENTS (%d) ", len(m.events))))
-	b.WriteString("\n")
-	if len(events) == 0 {
-		b.WriteString(dimStyle.Render("  No events recorded."))
-		b.WriteString("\n")
-	} else {
-		// Display most recent first.
-		for i := len(events) - 1; i >= 0; i-- {
-			e := events[i]
-			fmt.Fprintf(&b, "  %s  %s\n",
-				dimStyle.Render(e.Timestamp.Format("2006-01-02T15:04Z")),
-				string(e.Type),
-			)
-		}
-	}
-
-	// Footer hint
-	b.WriteString(hintStyle.Render("\n  q quit"))
+	// Footer
+	b.WriteString(hintStyle.Render("\n  tab/shift+tab switch tab  j/k navigate  1-4 jump  q quit"))
 	b.WriteString("\n")
 
 	return b.String()
 }
+
+func (m Model) renderRow(selected bool, content string) string {
+	if selected {
+		return cursorStyle.Render("  ▶ " + content)
+	}
+	return "    " + content
+}
+
+func (m Model) renderWorkflows(b *strings.Builder) {
+	if len(m.workflows) == 0 {
+		b.WriteString(dimStyle.Render("  No workflows started."))
+		b.WriteString("\n")
+		return
+	}
+	for i, wf := range m.workflows {
+		startedStr := ""
+		if wf.StartedAt != nil {
+			startedStr = wf.StartedAt.Format("2006-01-02T15:04Z")
+		}
+		line := fmt.Sprintf("%-8s  %-*s  %-10s  %s",
+			wf.ID.String()[:8],
+			colWidth, wf.Name,
+			string(wf.Status),
+			startedStr,
+		)
+		b.WriteString(m.renderRow(i == m.cursor, line))
+		b.WriteString("\n")
+	}
+}
+
+func (m Model) renderMemories(b *strings.Builder) {
+	if len(m.memories) == 0 {
+		b.WriteString(dimStyle.Render("  No memories recorded."))
+		b.WriteString("\n")
+		return
+	}
+	for i, mem := range m.memories {
+		line := fmt.Sprintf("%-*s  %s", colWidth, mem.Key, mem.Title)
+		b.WriteString(m.renderRow(i == m.cursor, line))
+		b.WriteString("\n")
+	}
+}
+
+func (m Model) renderProviders(b *strings.Builder) {
+	if len(m.providers) == 0 {
+		b.WriteString(dimStyle.Render("  No providers detected."))
+		b.WriteString("\n")
+		return
+	}
+	for i, r := range m.providers {
+		detected := "no "
+		if r.Detected {
+			detected = "yes"
+		}
+		injected := "-  "
+		if r.Injected {
+			injected = "yes"
+		}
+		line := fmt.Sprintf("%-10s  detected:%-3s  injected:%-3s  %s",
+			r.Provider.Name,
+			detected,
+			injected,
+			r.Provider.ConfigPath,
+		)
+		b.WriteString(m.renderRow(i == m.cursor, line))
+		b.WriteString("\n")
+	}
+}
+
+func (m Model) renderEvents(b *strings.Builder) {
+	events := m.events
+	if len(events) > maxDashboardEvents {
+		events = events[len(events)-maxDashboardEvents:]
+	}
+	if len(events) == 0 {
+		b.WriteString(dimStyle.Render("  No events recorded."))
+		b.WriteString("\n")
+		return
+	}
+	// Display most recent first; cursor 0 = most recent.
+	for i, idx := 0, len(events)-1; idx >= 0; i, idx = i+1, idx-1 {
+		e := events[idx]
+		line := fmt.Sprintf("%s  %s",
+			e.Timestamp.Format("2006-01-02T15:04Z"),
+			string(e.Type),
+		)
+		b.WriteString(m.renderRow(i == m.cursor, line))
+		b.WriteString("\n")
+	}
+}
+
+// sectionStyle is kept for potential future use by sub-panels.
+var _ = sectionStyle

@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
+	"github.com/PRNVBAJAJ/context-os/internal/adapter"
 	"github.com/PRNVBAJAJ/context-os/internal/application"
 	"github.com/PRNVBAJAJ/context-os/internal/project"
 	"github.com/PRNVBAJAJ/context-os/internal/storage"
@@ -61,7 +62,9 @@ func newTuiCommand() *cobra.Command {
 				return storeErr
 			}
 
-			m := instui.New(p, workflows, memories, events)
+			providers := adapter.Detect(rootPath)
+
+			m := instui.New(p, workflows, memories, events, providers)
 
 			// Launch the interactive Bubble Tea program only when stdout is a
 			// real terminal. In piped / CI environments, fall back to a static
