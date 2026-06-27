@@ -55,7 +55,7 @@ func InitializeProject(ctx context.Context, opts InitOptions) (*project.Project,
 	if err != nil {
 		return nil, err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	if err := store.Projects().Create(ctx, p); err != nil {
 		return nil, err

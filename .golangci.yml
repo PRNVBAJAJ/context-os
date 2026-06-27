@@ -12,6 +12,12 @@ linters:
     - exhaustive
 
 linters-settings:
+  errcheck:
+    # fmt.Fprint* writes to cobra stdout/stderr; I/O errors there are not actionable.
+    exclude-functions:
+      - fmt.Fprint
+      - fmt.Fprintf
+      - fmt.Fprintln
   exhaustive:
     default-signifies-exhaustive: true
 
@@ -22,7 +28,3 @@ issues:
       linters:
         - errcheck
       text: "os\\.Chdir"
-    # fmt.Fprint* writes to cobra's stdout/stderr; I/O errors there are not actionable.
-    - source: "fmt\\.F(print|printf|println)"
-      linters:
-        - errcheck

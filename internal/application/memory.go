@@ -39,7 +39,7 @@ func AddMemory(ctx context.Context, opts AddMemoryOptions) (*memory.Memory, erro
 	if err != nil {
 		return nil, err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	if err := store.Memories().Add(ctx, p.ID, m); err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func ListMemories(ctx context.Context, opts ListMemoriesOptions) ([]*memory.Memo
 	if err != nil {
 		return nil, err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	return store.Memories().List(ctx, p.ID, storage.MemoryFilter{})
 }
