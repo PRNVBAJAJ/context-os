@@ -76,6 +76,7 @@ changelog:
 
 brews:
   - name: context
+    directory: Formula
     repository:
       owner: PRNVBAJAJ
       name: homebrew-tap
