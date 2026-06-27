@@ -178,6 +178,83 @@ func TestPauseAndResumeWorkflow(t *testing.T) {
 	}
 }
 
+func TestDeleteWorkflow_CompletedAllowed(t *testing.T) {
+	dir, prefix := initProjectWithWorkflow(t)
+	ctx := context.Background()
+
+	if _, err := application.CompleteWorkflow(ctx, application.CompleteWorkflowOptions{
+		RootPath: dir, IDPrefix: prefix,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := application.DeleteWorkflow(ctx, application.DeleteWorkflowOptions{
+		RootPath: dir, IDPrefix: prefix,
+	}); err != nil {
+		t.Fatalf("DeleteWorkflow: %v", err)
+	}
+
+	workflows, _ := application.ListWorkflows(ctx, application.ListWorkflowsOptions{RootPath: dir})
+	if len(workflows) != 0 {
+		t.Errorf("expected 0 workflows after delete, got %d", len(workflows))
+	}
+}
+
+func TestDeleteWorkflow_FailedAllowed(t *testing.T) {
+	dir, prefix := initProjectWithWorkflow(t)
+	ctx := context.Background()
+
+	if _, err := application.FailWorkflow(ctx, application.FailWorkflowOptions{
+		RootPath: dir, IDPrefix: prefix,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := application.DeleteWorkflow(ctx, application.DeleteWorkflowOptions{
+		RootPath: dir, IDPrefix: prefix,
+	}); err != nil {
+		t.Fatalf("DeleteWorkflow on failed: %v", err)
+	}
+}
+
+func TestDeleteWorkflow_RunningRejected(t *testing.T) {
+	dir, prefix := initProjectWithWorkflow(t)
+	ctx := context.Background()
+
+	err := application.DeleteWorkflow(ctx, application.DeleteWorkflowOptions{
+		RootPath: dir, IDPrefix: prefix,
+	})
+	if err == nil {
+		t.Fatal("expected error deleting running workflow")
+	}
+	var domainErr *shared.Error
+	if !errors.As(err, &domainErr) || domainErr.Code != shared.CodeInvalidInput {
+		t.Errorf("want CodeInvalidInput, got %v", err)
+	}
+}
+
+func TestDeleteWorkflow_PausedRejected(t *testing.T) {
+	dir, prefix := initProjectWithWorkflow(t)
+	ctx := context.Background()
+
+	if _, err := application.PauseWorkflow(ctx, application.PauseWorkflowOptions{
+		RootPath: dir, IDPrefix: prefix,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := application.DeleteWorkflow(ctx, application.DeleteWorkflowOptions{
+		RootPath: dir, IDPrefix: prefix,
+	})
+	if err == nil {
+		t.Fatal("expected error deleting paused workflow")
+	}
+	var domainErr *shared.Error
+	if !errors.As(err, &domainErr) || domainErr.Code != shared.CodeInvalidInput {
+		t.Errorf("want CodeInvalidInput, got %v", err)
+	}
+}
+
 func TestTransition_InvalidPrefix(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()

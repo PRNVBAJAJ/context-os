@@ -112,12 +112,17 @@ func newMemoryListCommand() *cobra.Command {
 			}
 
 			tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(tw, "KEY\tTITLE\tCREATED")
+			fmt.Fprintln(tw, "KEY\tTITLE\tCREATED\tPREVIEW")
 			for _, m := range memories {
-				fmt.Fprintf(tw, "%s\t%s\t%s\n",
+				preview := m.Content
+				if len(preview) > 60 {
+					preview = preview[:57] + "..."
+				}
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
 					m.Key,
 					m.Title,
 					m.CreatedAt.Format("2006-01-02T15:04Z"),
+					preview,
 				)
 			}
 			return tw.Flush()

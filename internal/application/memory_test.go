@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/PRNVBAJAJ/context-os/internal/application"
@@ -151,5 +152,115 @@ func TestListMemories_EmptyProject(t *testing.T) {
 	}
 	if len(memories) != 0 {
 		t.Errorf("expected 0 memories, got %d", len(memories))
+	}
+}
+
+func TestUpdateMemory_Success(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	if _, err := application.InitializeProject(ctx, application.InitOptions{
+		Name: "update-mem-test", RootPath: dir, NoInject: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := application.AddMemory(ctx, application.AddMemoryOptions{
+		RootPath: dir, Key: "db-driver", Content: "Use modernc sqlite.",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := application.UpdateMemory(ctx, application.UpdateMemoryOptions{
+		RootPath: dir, Key: "db-driver", Content: "Use modernc sqlite — no CGO required.",
+	})
+	if err != nil {
+		t.Fatalf("UpdateMemory: %v", err)
+	}
+	if updated.Content != "Use modernc sqlite — no CGO required." {
+		t.Errorf("Content = %q", updated.Content)
+	}
+
+	// Verify markdown file is updated.
+	data, err := os.ReadFile(filepath.Join(project.Dir(dir), "memory", "db-driver.md"))
+	if err != nil {
+		t.Fatalf("memory file: %v", err)
+	}
+	if !strings.Contains(string(data), "no CGO required") {
+		t.Error("markdown file not updated")
+	}
+}
+
+func TestUpdateMemory_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	if _, err := application.InitializeProject(ctx, application.InitOptions{
+		Name: "update-notfound", RootPath: dir, NoInject: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := application.UpdateMemory(ctx, application.UpdateMemoryOptions{
+		RootPath: dir, Key: "ghost", Content: "irrelevant",
+	})
+	if err == nil {
+		t.Fatal("expected error for missing key")
+	}
+	var domainErr *shared.Error
+	if !errors.As(err, &domainErr) || domainErr.Code != shared.CodeNotFound {
+		t.Errorf("want CodeNotFound, got %v", err)
+	}
+}
+
+func TestDeleteMemory_Success(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	if _, err := application.InitializeProject(ctx, application.InitOptions{
+		Name: "del-mem-test", RootPath: dir, NoInject: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := application.AddMemory(ctx, application.AddMemoryOptions{
+		RootPath: dir, Key: "to-delete", Content: "temporary.",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := application.DeleteMemory(ctx, application.DeleteMemoryOptions{
+		RootPath: dir, Key: "to-delete",
+	}); err != nil {
+		t.Fatalf("DeleteMemory: %v", err)
+	}
+
+	memories, _ := application.ListMemories(ctx, application.ListMemoriesOptions{RootPath: dir})
+	if len(memories) != 0 {
+		t.Errorf("expected 0 memories after delete, got %d", len(memories))
+	}
+	// Markdown file should be gone.
+	if _, err := os.Stat(filepath.Join(project.Dir(dir), "memory", "to-delete.md")); !os.IsNotExist(err) {
+		t.Error("markdown file should have been removed")
+	}
+}
+
+func TestDeleteMemory_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	if _, err := application.InitializeProject(ctx, application.InitOptions{
+		Name: "del-notfound", RootPath: dir, NoInject: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := application.DeleteMemory(ctx, application.DeleteMemoryOptions{
+		RootPath: dir, Key: "ghost",
+	})
+	if err == nil {
+		t.Fatal("expected error for missing key")
+	}
+	var domainErr *shared.Error
+	if !errors.As(err, &domainErr) || domainErr.Code != shared.CodeNotFound {
+		t.Errorf("want CodeNotFound, got %v", err)
 	}
 }

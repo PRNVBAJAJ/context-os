@@ -131,3 +131,75 @@ func TestWorkflowStart_NotInitialized(t *testing.T) {
 		t.Error("expected error when project not initialized, got nil")
 	}
 }
+
+func TestWorkflowDelete_Success(t *testing.T) {
+	_, cleanup := setupInitializedProject(t, "wf-del-test")
+	t.Cleanup(cleanup)
+
+	run := func(args ...string) string {
+		t.Helper()
+		cmd := newRootCommand()
+		out := &bytes.Buffer{}
+		cmd.SetOut(out)
+		cmd.SetErr(&bytes.Buffer{})
+		cmd.SetArgs(args)
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		return out.String()
+	}
+
+	startOut := run("workflow", "start", "to-delete")
+	// Extract the 8-char ID prefix from output like: Workflow "to-delete" started (ID: abcd1234).
+	var prefix string
+	if idx := strings.Index(startOut, "ID: "); idx >= 0 {
+		prefix = startOut[idx+4 : idx+12]
+	}
+	if prefix == "" {
+		t.Skip("could not extract workflow ID from output")
+	}
+
+	run("workflow", "complete", prefix)
+
+	out := &bytes.Buffer{}
+	cmd := newRootCommand()
+	cmd.SetOut(out)
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"workflow", "delete", prefix})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("workflow delete: %v", err)
+	}
+	if !strings.Contains(out.String(), "deleted") {
+		t.Errorf("output should mention deleted, got: %s", out.String())
+	}
+}
+
+func TestWorkflowDelete_RunningRejected(t *testing.T) {
+	_, cleanup := setupInitializedProject(t, "wf-del-running-test")
+	t.Cleanup(cleanup)
+
+	startOut := &bytes.Buffer{}
+	start := newRootCommand()
+	start.SetOut(startOut)
+	start.SetErr(&bytes.Buffer{})
+	start.SetArgs([]string{"workflow", "start", "active-workflow"})
+	if err := start.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	var prefix string
+	if idx := strings.Index(startOut.String(), "ID: "); idx >= 0 {
+		prefix = startOut.String()[idx+4 : idx+12]
+	}
+	if prefix == "" {
+		t.Skip("could not extract workflow ID")
+	}
+
+	cmd := newRootCommand()
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"workflow", "delete", prefix})
+	if err := cmd.Execute(); err == nil {
+		t.Error("expected error deleting running workflow, got nil")
+	}
+}

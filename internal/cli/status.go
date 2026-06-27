@@ -40,7 +40,21 @@ func newStatusCommand() *cobra.Command {
 			if p.Language != "" {
 				fmt.Fprintf(w, "Language: %s\n", p.Language)
 			}
-			fmt.Fprintf(w, "Runtime:  %s\n", p.RuntimeVersion)
+			fmt.Fprintf(w, "Runtime:  %s\n", shared.Version)
+			fmt.Fprintf(w, "Memories: %d\n", status.MemoryCount)
+			if status.ActiveWorkflow != nil {
+				fmt.Fprintf(w, "Workflow: %s (%s)\n", status.ActiveWorkflow.Name, status.ActiveWorkflow.ID.String()[:8])
+			}
+			if status.LastCheckpoint != nil {
+				note := status.LastCheckpoint.Note
+				if note == "" {
+					note = "(no note)"
+				}
+				fmt.Fprintf(w, "Last checkpoint: %s — %s\n",
+					status.LastCheckpoint.CreatedAt.Format("2006-01-02T15:04Z"),
+					note,
+				)
+			}
 			return nil
 		},
 	}

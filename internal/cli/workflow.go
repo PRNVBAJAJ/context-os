@@ -2,9 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
 	"text/tabwriter"
 
 	"github.com/PRNVBAJAJ/context-os/internal/application"
+	"github.com/PRNVBAJAJ/context-os/internal/project"
+	"github.com/PRNVBAJAJ/context-os/internal/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -183,7 +186,26 @@ func newWorkflowResumeCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Workflow %q resumed.\n", w.Name)
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "Workflow %q resumed.\n", w.Name)
+
+			// Show last checkpoint note so the developer can pick up immediately.
+			dbPath := filepath.Join(project.Dir(rootPath), "runtime.db")
+			store, err := storage.Open(cmd.Context(), dbPath)
+			if err != nil {
+				return nil // non-fatal: checkpoint display is best-effort
+			}
+			cps, listErr := store.Checkpoints().List(cmd.Context(), w.ID, storage.CheckpointFilter{})
+			_ = store.Close()
+			if listErr == nil && len(cps) > 0 {
+				last := cps[len(cps)-1]
+				note := last.Note
+				if note == "" {
+					note = "(no note)"
+				}
+				fmt.Fprintf(out, "Last checkpoint (%s): %s\n",
+					last.CreatedAt.Format("2006-01-02T15:04Z"), note)
+			}
 			return nil
 		},
 	}

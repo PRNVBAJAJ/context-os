@@ -2,22 +2,65 @@ package application
 
 import (
 	"context"
+	"path/filepath"
 
+	"github.com/PRNVBAJAJ/context-os/internal/checkpoint"
 	"github.com/PRNVBAJAJ/context-os/internal/project"
+	"github.com/PRNVBAJAJ/context-os/internal/storage"
+	"github.com/PRNVBAJAJ/context-os/internal/workflow"
 )
 
 // ProjectStatus is the result of inspecting the current state of a project.
-// Additional fields (active workflow, session count, etc.) will be added as
-// the corresponding runtime components are implemented.
 type ProjectStatus struct {
-	Project *project.Project
+	Project        *project.Project
+	ActiveWorkflow *workflow.Workflow
+	MemoryCount    int
+	LastCheckpoint *checkpoint.Checkpoint
 }
 
-// GetProjectStatus loads the project metadata for the project rooted at rootPath.
+// GetProjectStatus loads the project metadata and runtime state for rootPath.
 func GetProjectStatus(ctx context.Context, rootPath string) (*ProjectStatus, error) {
 	p, err := project.Load(rootPath)
 	if err != nil {
 		return nil, err
 	}
-	return &ProjectStatus{Project: p}, nil
+
+	dbPath := filepath.Join(project.Dir(rootPath), "runtime.db")
+	store, err := storage.Open(ctx, dbPath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = store.Close() }()
+
+	status := &ProjectStatus{Project: p}
+
+	// Active workflow: first running one found.
+	workflows, err := store.Workflows().List(ctx, p.ID, storage.WorkflowFilter{})
+	if err != nil {
+		return nil, err
+	}
+	for _, w := range workflows {
+		if w.Status == workflow.StatusRunning {
+			status.ActiveWorkflow = w
+			break
+		}
+	}
+
+	// Memory count.
+	memories, err := store.Memories().List(ctx, p.ID, storage.MemoryFilter{})
+	if err != nil {
+		return nil, err
+	}
+	status.MemoryCount = len(memories)
+
+	// Last checkpoint.
+	checkpoints, err := store.Checkpoints().List(ctx, p.ID, storage.CheckpointFilter{})
+	if err != nil {
+		return nil, err
+	}
+	if len(checkpoints) > 0 {
+		status.LastCheckpoint = checkpoints[len(checkpoints)-1]
+	}
+
+	return status, nil
 }
