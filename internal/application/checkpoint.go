@@ -30,7 +30,7 @@ func CreateCheckpoint(ctx context.Context, opts CreateCheckpointOptions) (*check
 	if err != nil {
 		return nil, err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	workflowID := shared.EmptyID
 	if opts.WorkflowIDPrefix != "" {
@@ -66,7 +66,7 @@ func ListCheckpoints(ctx context.Context, opts ListCheckpointsOptions) ([]*check
 	if err != nil {
 		return nil, err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	return store.Checkpoints().List(ctx, p.ID, storage.CheckpointFilter{})
 }

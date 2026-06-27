@@ -28,12 +28,12 @@ func Open(ctx context.Context, path string) (Storage, error) {
 	db.SetMaxOpenConns(1)
 
 	if err := db.PingContext(ctx); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, shared.Wrap(shared.CodeInternal, "failed to connect to sqlite database", err)
 	}
 
 	if err := runMigrations(ctx, db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, shared.Wrap(shared.CodeInternal, "schema migration failed", err)
 	}
 
@@ -108,7 +108,7 @@ func (s *sqliteEventStore) List(ctx context.Context, filter EventFilter) ([]*eve
 	if err != nil {
 		return nil, shared.Wrap(shared.CodeInternal, "failed to list events", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var events []*event.Event
 	for rows.Next() {
@@ -278,7 +278,7 @@ func (s *sqliteMemoryStore) List(ctx context.Context, projectID shared.ID, filte
 	if err != nil {
 		return nil, shared.Wrap(shared.CodeInternal, "failed to list memories", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var memories []*memory.Memory
 	for rows.Next() {
@@ -456,7 +456,7 @@ ORDER BY created_at DESC`
 	if err != nil {
 		return nil, shared.Wrap(shared.CodeInternal, "failed to list workflows", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var workflows []*workflow.Workflow
 	for rows.Next() {
@@ -599,7 +599,7 @@ WHERE project_id = ?`
 	if err != nil {
 		return nil, shared.Wrap(shared.CodeInternal, "failed to list checkpoints", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var checkpoints []*checkpoint.Checkpoint
 	for rows.Next() {

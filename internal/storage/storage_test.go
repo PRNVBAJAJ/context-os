@@ -23,7 +23,7 @@ func openTestDB(t *testing.T) storage.Storage {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 
@@ -52,13 +52,13 @@ func TestOpen_RunsMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first Open: %v", err)
 	}
-	db1.Close()
+	_ = db1.Close()
 
 	db2, err := storage.Open(context.Background(), path)
 	if err != nil {
 		t.Fatalf("second Open (idempotent): %v", err)
 	}
-	db2.Close()
+	_ = db2.Close()
 }
 
 func TestProjectStore_CreateAndGetByPath(t *testing.T) {

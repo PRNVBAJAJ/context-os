@@ -56,7 +56,7 @@ func newTuiCommand() *cobra.Command {
 				return err
 			}
 			events, storeErr := store.Events().List(ctx, storage.EventFilter{})
-			store.Close()
+			_ = store.Close()
 			if storeErr != nil {
 				return storeErr
 			}

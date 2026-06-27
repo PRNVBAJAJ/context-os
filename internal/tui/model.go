@@ -97,12 +97,12 @@ func (m Model) View() string {
 			if wf.StartedAt != nil {
 				startedStr = wf.StartedAt.Format("2006-01-02T15:04Z")
 			}
-			b.WriteString(fmt.Sprintf("  %s  %-*s  %-10s  %s\n",
+			fmt.Fprintf(&b, "  %s  %-*s  %-10s  %s\n",
 				wf.ID.String()[:8],
 				colWidth, wf.Name,
 				string(wf.Status),
 				startedStr,
-			))
+			)
 		}
 	}
 
@@ -115,7 +115,7 @@ func (m Model) View() string {
 		b.WriteString("\n")
 	} else {
 		for _, mem := range m.memories {
-			b.WriteString(fmt.Sprintf("  %-*s  %s\n", colWidth, mem.Key, mem.Title))
+			fmt.Fprintf(&b, "  %-*s  %s\n", colWidth, mem.Key, mem.Title)
 		}
 	}
 
@@ -134,10 +134,10 @@ func (m Model) View() string {
 		// Display most recent first.
 		for i := len(events) - 1; i >= 0; i-- {
 			e := events[i]
-			b.WriteString(fmt.Sprintf("  %s  %s\n",
+			fmt.Fprintf(&b, "  %s  %s\n",
 				dimStyle.Render(e.Timestamp.Format("2006-01-02T15:04Z")),
 				string(e.Type),
-			))
+			)
 		}
 	}
 

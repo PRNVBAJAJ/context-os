@@ -40,7 +40,7 @@ func RunDoctor(ctx context.Context, rootPath string) (*DoctorResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	allEvents, err := store.Events().List(ctx, storage.EventFilter{})
 	if err != nil {

@@ -22,3 +22,7 @@ issues:
       linters:
         - errcheck
       text: "os\\.Chdir"
+    # fmt.Fprint* writes to cobra's stdout/stderr; I/O errors there are not actionable.
+    - source: "fmt\\.F(print|printf|println)"
+      linters:
+        - errcheck
