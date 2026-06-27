@@ -11,8 +11,9 @@ import (
 )
 
 func TestDir(t *testing.T) {
-	got := project.Dir("/home/user/my-repo")
-	want := "/home/user/my-repo/.context"
+	root := filepath.Join("/home", "user", "my-repo")
+	got := project.Dir(root)
+	want := filepath.Join(root, project.ContextDir)
 	if got != want {
 		t.Errorf("Dir() = %q, want %q", got, want)
 	}
