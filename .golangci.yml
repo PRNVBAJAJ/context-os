@@ -1,0 +1,25 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosimple
+    - bodyclose
+    - noctx
+    - exhaustive
+
+linters-settings:
+  exhaustive:
+    default-signifies-exhaustive: true
+
+issues:
+  exclude-rules:
+    # nolint directives on test cleanup functions (os.Chdir) are intentional.
+    - path: "_test\\.go"
+      linters:
+        - errcheck
+      text: "os\\.Chdir"
