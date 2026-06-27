@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -8,8 +9,16 @@ import (
 )
 
 const (
-	injectionMarker    = "<!-- context-os -->"
-	injectionEndMarker = "<!-- end context-os -->"
+	injectionMarker = "<!-- context-os -->"
+
+	// claudeSettingsPath is the project-level Claude Code settings file.
+	// Committing this file gives every collaborator the same hooks automatically.
+	claudeSettingsPath = ".claude/settings.json"
+
+	// claudeHookScript is injected as a UserPromptSubmit hook in .claude/settings.json.
+	// It runs before every Claude Code prompt, surfacing active workflows and memories
+	// so the AI cannot miss them even in long sessions.
+	claudeHookScript = "context status 2>/dev/null && echo '---' && context workflow list 2>/dev/null && echo '---' && context memory list 2>/dev/null || true"
 )
 
 // injectionBody is the Context OS usage block appended to provider config files.
@@ -58,6 +67,16 @@ At the start of a new session, orient first:
 <!-- end context-os -->
 `
 
+type claudeHookEntry struct {
+	Matcher string       `json:"matcher"`
+	Hooks   []claudeHook `json:"hooks"`
+}
+
+type claudeHook struct {
+	Type    string `json:"type"`
+	Command string `json:"command"`
+}
+
 // Provider describes a known AI CLI tool and where it reads project instructions.
 type Provider struct {
 	Name       string // e.g. "claude", "cursor"
@@ -70,11 +89,10 @@ type Provider struct {
 type DetectionResult struct {
 	Provider Provider
 	Detected bool // binary found in PATH
-	Injected bool // Context OS block already present in config file
+	Injected bool // Context OS fully configured for this provider
 }
 
 // KnownProviders returns the full registry of supported AI CLI tools.
-// AGENTS.md is listed once for opencode; codex reuses the same path.
 func KnownProviders() []Provider {
 	return []Provider{
 		{Name: "claude", Binary: "claude", ConfigPath: "CLAUDE.md", NeedsDir: false},
@@ -87,8 +105,8 @@ func KnownProviders() []Provider {
 	}
 }
 
-// Detect checks which providers are installed and whether their config files
-// already contain the Context OS block.
+// Detect checks which providers are installed and whether Context OS is fully
+// configured for each one.
 func Detect(rootPath string) []DetectionResult {
 	providers := KnownProviders()
 	results := make([]DetectionResult, 0, len(providers))
@@ -103,44 +121,154 @@ func Detect(rootPath string) []DetectionResult {
 	return results
 }
 
-// IsInjected reports whether the provider's config file in rootPath already
-// contains the Context OS injection marker.
+// IsInjected reports whether Context OS is fully configured for the provider.
+// For "claude" this means both CLAUDE.md has the marker AND .claude/settings.json
+// contains the UserPromptSubmit hook.
 func IsInjected(rootPath string, p Provider) bool {
-	path := filepath.Join(rootPath, p.ConfigPath)
-	data, err := os.ReadFile(path)
-	if err != nil {
+	data, err := os.ReadFile(filepath.Join(rootPath, p.ConfigPath))
+	if err != nil || !strings.Contains(string(data), injectionMarker) {
 		return false
 	}
-	return strings.Contains(string(data), injectionMarker)
+	if p.Name == "claude" {
+		return isClaudeHookInjected(rootPath)
+	}
+	return true
 }
 
-// Inject writes the Context OS usage block to the provider's config file.
-// It is idempotent: if the marker is already present the file is unchanged.
-// The parent directory is created when p.NeedsDir is true.
+// Inject configures Context OS for the given provider. It is fully idempotent:
+// each step only runs if that step is not already complete.
+//
+// For "claude" this means:
+//  1. Append the usage block to CLAUDE.md (if not present)
+//  2. Merge the UserPromptSubmit hook into .claude/settings.json (if not present)
+//
+// For "cursor" a standalone .cursor/rules/context-os.mdc is written.
+// All other providers append the usage block to their config file.
 func Inject(rootPath string, p Provider) error {
-	if IsInjected(rootPath, p) {
-		return nil
+	configPath := filepath.Join(rootPath, p.ConfigPath)
+
+	if !isConfigMarkerPresent(configPath) {
+		if err := injectConfigFile(configPath, p); err != nil {
+			return err
+		}
 	}
 
-	path := filepath.Join(rootPath, p.ConfigPath)
+	if p.Name == "claude" {
+		_ = injectClaudeHook(rootPath)
+	}
 
+	return nil
+}
+
+// isConfigMarkerPresent reports whether the config file already contains the marker.
+func isConfigMarkerPresent(path string) bool {
+	data, err := os.ReadFile(path)
+	return err == nil && strings.Contains(string(data), injectionMarker)
+}
+
+// injectConfigFile writes the injection body to the provider's config file.
+func injectConfigFile(path string, p Provider) error {
 	if p.NeedsDir {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return err
 		}
 	}
-
-	// Cursor gets its own standalone file; all other providers append.
 	if p.Name == "cursor" {
 		return os.WriteFile(path, []byte(cursorFileContent), 0o644)
 	}
-
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = f.Close() }()
-
 	_, err = f.WriteString(injectionBody)
+	return err
+}
+
+// isClaudeHookInjected reports whether .claude/settings.json already contains
+// the Context OS UserPromptSubmit hook.
+func isClaudeHookInjected(rootPath string) bool {
+	data, err := os.ReadFile(filepath.Join(rootPath, claudeSettingsPath))
+	return err == nil && strings.Contains(string(data), "context status")
+}
+
+// injectClaudeHook writes or merges the UserPromptSubmit hook into
+// .claude/settings.json, preserving any existing settings.
+// It also ensures .claude/ is listed in the project's .gitignore so that
+// the file is never accidentally committed.
+func injectClaudeHook(rootPath string) error {
+	if isClaudeHookInjected(rootPath) {
+		return nil
+	}
+
+	settingsPath := filepath.Join(rootPath, claudeSettingsPath)
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		return err
+	}
+
+	// Parse existing settings into a raw map so unknown fields are preserved.
+	raw := make(map[string]json.RawMessage)
+	if data, err := os.ReadFile(settingsPath); err == nil {
+		_ = json.Unmarshal(data, &raw)
+	}
+
+	// Merge into the existing UserPromptSubmit array.
+	var existing []claudeHookEntry
+	if raw["hooks"] != nil {
+		var hooksMap map[string][]claudeHookEntry
+		if err := json.Unmarshal(raw["hooks"], &hooksMap); err == nil {
+			existing = hooksMap["UserPromptSubmit"]
+		}
+	}
+	existing = append(existing, claudeHookEntry{
+		Matcher: "",
+		Hooks:   []claudeHook{{Type: "command", Command: claudeHookScript}},
+	})
+
+	hooksBytes, err := json.Marshal(map[string][]claudeHookEntry{"UserPromptSubmit": existing})
+	if err != nil {
+		return err
+	}
+	raw["hooks"] = json.RawMessage(hooksBytes)
+
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(settingsPath, append(out, '\n'), 0o644); err != nil {
+		return err
+	}
+
+	// Keep .claude/ out of version control. It contains per-developer settings
+	// that should not be shared — each developer gets their own hook on init.
+	_ = ensureGitignored(rootPath, ".claude/")
+	return nil
+}
+
+// ensureGitignored appends pattern to <rootPath>/.gitignore if not already present.
+func ensureGitignored(rootPath, pattern string) error {
+	gitignorePath := filepath.Join(rootPath, ".gitignore")
+
+	data, err := os.ReadFile(gitignorePath)
+	if err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.TrimSpace(line) == pattern {
+				return nil // already present
+			}
+		}
+	}
+
+	f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+
+	// Ensure the entry starts on its own line.
+	entry := pattern + "\n"
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		entry = "\n" + entry
+	}
+	_, err = f.WriteString(entry)
 	return err
 }
