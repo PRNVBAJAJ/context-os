@@ -11,6 +11,7 @@ import (
 	"github.com/PRNVBAJAJ/context-os/internal/event"
 	"github.com/PRNVBAJAJ/context-os/internal/memory"
 	"github.com/PRNVBAJAJ/context-os/internal/project"
+	"github.com/PRNVBAJAJ/context-os/internal/shared"
 	"github.com/PRNVBAJAJ/context-os/internal/workflow"
 )
 
@@ -151,7 +152,7 @@ func (m Model) View() string {
 
 	// Header
 	b.WriteString("\n")
-	b.WriteString(headerStyle.Render(fmt.Sprintf("  Context OS — %s (%s)", m.project.Name, m.project.RuntimeVersion)))
+	b.WriteString(headerStyle.Render(fmt.Sprintf("  Context OS — %s (%s)", m.project.Name, shared.Version)))
 	b.WriteString("\n")
 	b.WriteString(dimStyle.Render(fmt.Sprintf("  %s", m.project.RootPath)))
 	b.WriteString("\n\n")
