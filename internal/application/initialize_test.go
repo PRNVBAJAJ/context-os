@@ -16,18 +16,20 @@ func TestInitializeProject_Success(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 
-	p, err := application.InitializeProject(ctx, application.InitOptions{
+	result, err := application.InitializeProject(ctx, application.InitOptions{
 		Name:     "test-project",
 		RootPath: dir,
 		Language: "go",
+		NoInject: true,
 	})
 
 	if err != nil {
 		t.Fatalf("InitializeProject: %v", err)
 	}
-	if p == nil {
+	if result == nil || result.Project == nil {
 		t.Fatal("returned project is nil")
 	}
+	p := result.Project
 	if p.ID.IsEmpty() {
 		t.Error("project ID must not be empty")
 	}
@@ -45,6 +47,7 @@ func TestInitializeProject_CreatesLayout(t *testing.T) {
 
 	if _, err := application.InitializeProject(ctx, application.InitOptions{
 		RootPath: dir,
+		NoInject: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -80,14 +83,15 @@ func TestInitializeProject_NameDerivedFromPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := application.InitializeProject(context.Background(), application.InitOptions{
+	result, err := application.InitializeProject(context.Background(), application.InitOptions{
 		RootPath: dir,
+		NoInject: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Name != "my-app" {
-		t.Errorf("Name = %q, want %q", p.Name, "my-app")
+	if result.Project.Name != "my-app" {
+		t.Errorf("Name = %q, want %q", result.Project.Name, "my-app")
 	}
 }
 
@@ -95,7 +99,7 @@ func TestInitializeProject_ConflictOnDoubleInit(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 
-	opts := application.InitOptions{RootPath: dir}
+	opts := application.InitOptions{RootPath: dir, NoInject: true}
 
 	if _, err := application.InitializeProject(ctx, opts); err != nil {
 		t.Fatalf("first init: %v", err)
@@ -123,6 +127,7 @@ func TestInitializeProject_ProjectYamlIsLoadable(t *testing.T) {
 		Name:     "yaml-loadable",
 		RootPath: dir,
 		Language: "python",
+		NoInject: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -133,8 +138,8 @@ func TestInitializeProject_ProjectYamlIsLoadable(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	if loaded.ID != created.ID {
-		t.Errorf("loaded ID = %q, want %q", loaded.ID, created.ID)
+	if loaded.ID != created.Project.ID {
+		t.Errorf("loaded ID = %q, want %q", loaded.ID, created.Project.ID)
 	}
 	if loaded.Language != "python" {
 		t.Errorf("loaded Language = %q, want %q", loaded.Language, "python")

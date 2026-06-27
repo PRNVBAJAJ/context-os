@@ -28,4 +28,7 @@ type WorkflowStore interface {
 	// List returns workflows for the project ordered by created_at descending
 	// (most recent first), optionally capped by filter.Limit.
 	List(ctx context.Context, projectID shared.ID, filter WorkflowFilter) ([]*workflow.Workflow, error)
+	// Delete removes the workflow with the given ID.
+	// Returns CodeNotFound if no workflow with that ID exists.
+	Delete(ctx context.Context, id shared.ID) error
 }

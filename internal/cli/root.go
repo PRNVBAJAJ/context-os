@@ -33,6 +33,7 @@ It is not a coding assistant. It is the operating system beneath them.`,
 	cmd.AddCommand(newMemoryCommand())
 	cmd.AddCommand(newWorkflowCommand())
 	cmd.AddCommand(newCheckpointCommand())
+	cmd.AddCommand(newProvidersCommand())
 	cmd.AddCommand(newTuiCommand())
 
 	return cmd

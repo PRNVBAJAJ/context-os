@@ -20,6 +20,7 @@ func newWorkflowCommand() *cobra.Command {
 	cmd.AddCommand(newWorkflowFailCommand())
 	cmd.AddCommand(newWorkflowPauseCommand())
 	cmd.AddCommand(newWorkflowResumeCommand())
+	cmd.AddCommand(newWorkflowDeleteCommand())
 	return cmd
 }
 
@@ -183,6 +184,30 @@ func newWorkflowResumeCommand() *cobra.Command {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Workflow %q resumed.\n", w.Name)
+			return nil
+		},
+	}
+}
+
+func newWorkflowDeleteCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "delete <id>",
+		Short: "Delete a completed or failed workflow",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rootPath, err := discoverProjectRoot()
+			if err != nil {
+				return err
+			}
+
+			if err := application.DeleteWorkflow(cmd.Context(), application.DeleteWorkflowOptions{
+				RootPath: rootPath,
+				IDPrefix: args[0],
+			}); err != nil {
+				return err
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Workflow %s deleted.\n", args[0])
 			return nil
 		},
 	}

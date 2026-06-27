@@ -706,3 +706,109 @@ func TestEventStore_OrderedByTimestamp(t *testing.T) {
 		t.Errorf("last event should be seq=3, got payload %q", events[2].Payload)
 	}
 }
+
+func TestMemoryStore_Update(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	projectID := shared.NewID()
+
+	m := makeMemory(t, "db-driver", "Use modernc sqlite.")
+	if err := db.Memories().Add(ctx, projectID, m); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	if err := db.Memories().Update(ctx, projectID, "db-driver", "Use modernc sqlite — no CGO."); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	got, err := db.Memories().GetByKey(ctx, projectID, "db-driver")
+	if err != nil {
+		t.Fatalf("GetByKey: %v", err)
+	}
+	if got.Content != "Use modernc sqlite — no CGO." {
+		t.Errorf("Content = %q, want updated value", got.Content)
+	}
+}
+
+func TestMemoryStore_Update_NotFound(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	projectID := shared.NewID()
+
+	err := db.Memories().Update(ctx, projectID, "missing", "content")
+	if err == nil {
+		t.Fatal("expected error for missing key")
+	}
+	var se *shared.Error
+	if !errors.As(err, &se) || se.Code != shared.CodeNotFound {
+		t.Errorf("expected CodeNotFound, got %v", err)
+	}
+}
+
+func TestMemoryStore_Delete(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	projectID := shared.NewID()
+
+	m := makeMemory(t, "to-delete", "temporary.")
+	if err := db.Memories().Add(ctx, projectID, m); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	if err := db.Memories().Delete(ctx, projectID, "to-delete"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	_, err := db.Memories().GetByKey(ctx, projectID, "to-delete")
+	if err == nil {
+		t.Fatal("expected error after delete")
+	}
+	var se *shared.Error
+	if !errors.As(err, &se) || se.Code != shared.CodeNotFound {
+		t.Errorf("expected CodeNotFound, got %v", err)
+	}
+}
+
+func TestMemoryStore_Delete_NotFound(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	projectID := shared.NewID()
+
+	err := db.Memories().Delete(ctx, projectID, "ghost")
+	var se *shared.Error
+	if !errors.As(err, &se) || se.Code != shared.CodeNotFound {
+		t.Errorf("expected CodeNotFound, got %v", err)
+	}
+}
+
+func TestWorkflowStore_Delete(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	projectID := shared.NewID()
+
+	w, _ := workflow.New("delete-me", "")
+	if err := db.Workflows().Create(ctx, projectID, w); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if err := db.Workflows().Delete(ctx, w.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	_, err := db.Workflows().GetByID(ctx, w.ID)
+	var se *shared.Error
+	if !errors.As(err, &se) || se.Code != shared.CodeNotFound {
+		t.Errorf("expected CodeNotFound after delete, got %v", err)
+	}
+}
+
+func TestWorkflowStore_Delete_NotFound(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+
+	err := db.Workflows().Delete(ctx, shared.NewID())
+	var se *shared.Error
+	if !errors.As(err, &se) || se.Code != shared.CodeNotFound {
+		t.Errorf("expected CodeNotFound, got %v", err)
+	}
+}

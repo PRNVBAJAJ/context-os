@@ -17,6 +17,8 @@ func newMemoryCommand() *cobra.Command {
 	cmd.AddCommand(newMemoryAddCommand())
 	cmd.AddCommand(newMemoryListCommand())
 	cmd.AddCommand(newMemoryShowCommand())
+	cmd.AddCommand(newMemoryUpdateCommand())
+	cmd.AddCommand(newMemoryDeleteCommand())
 	return cmd
 }
 
@@ -119,6 +121,56 @@ func newMemoryListCommand() *cobra.Command {
 				)
 			}
 			return tw.Flush()
+		},
+	}
+}
+
+func newMemoryUpdateCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "update <key> <content>",
+		Short: "Update the content of a memory entry",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rootPath, err := discoverProjectRoot()
+			if err != nil {
+				return err
+			}
+
+			_, err = application.UpdateMemory(cmd.Context(), application.UpdateMemoryOptions{
+				RootPath: rootPath,
+				Key:      args[0],
+				Content:  args[1],
+			})
+			if err != nil {
+				return err
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Memory %q updated.\n", args[0])
+			return nil
+		},
+	}
+}
+
+func newMemoryDeleteCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "delete <key>",
+		Short: "Delete a memory entry",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rootPath, err := discoverProjectRoot()
+			if err != nil {
+				return err
+			}
+
+			if err := application.DeleteMemory(cmd.Context(), application.DeleteMemoryOptions{
+				RootPath: rootPath,
+				Key:      args[0],
+			}); err != nil {
+				return err
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Memory %q deleted.\n", args[0])
+			return nil
 		},
 	}
 }

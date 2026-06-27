@@ -16,6 +16,7 @@ func TestGetProjectStatus_Success(t *testing.T) {
 		Name:     "status-test",
 		RootPath: dir,
 		Language: "go",
+		NoInject: true,
 	})
 	if err != nil {
 		t.Fatalf("InitializeProject: %v", err)
@@ -29,8 +30,8 @@ func TestGetProjectStatus_Success(t *testing.T) {
 	if status.Project == nil {
 		t.Fatal("status.Project is nil")
 	}
-	if status.Project.ID != created.ID {
-		t.Errorf("ID = %q, want %q", status.Project.ID, created.ID)
+	if status.Project.ID != created.Project.ID {
+		t.Errorf("ID = %q, want %q", status.Project.ID, created.Project.ID)
 	}
 	if status.Project.Name != "status-test" {
 		t.Errorf("Name = %q, want %q", status.Project.Name, "status-test")

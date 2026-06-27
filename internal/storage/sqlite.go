@@ -649,6 +649,61 @@ WHERE id = ?`, id.String())
 	return cp, nil
 }
 
+func (s *sqliteMemoryStore) Update(ctx context.Context, projectID shared.ID, key string, content string) error {
+	result, err := s.db.ExecContext(ctx, `
+UPDATE memory SET content = ?, updated_at = ? WHERE project_id = ? AND key = ?`,
+		content,
+		time.Now().UTC().Format(time.RFC3339),
+		projectID.String(),
+		key,
+	)
+	if err != nil {
+		return shared.Wrap(shared.CodeInternal, "failed to update memory", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return shared.Wrap(shared.CodeInternal, "failed to check rows affected", err)
+	}
+	if rows == 0 {
+		return shared.NewError(shared.CodeNotFound, "memory not found")
+	}
+	return nil
+}
+
+func (s *sqliteMemoryStore) Delete(ctx context.Context, projectID shared.ID, key string) error {
+	result, err := s.db.ExecContext(ctx, `
+DELETE FROM memory WHERE project_id = ? AND key = ?`,
+		projectID.String(),
+		key,
+	)
+	if err != nil {
+		return shared.Wrap(shared.CodeInternal, "failed to delete memory", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return shared.Wrap(shared.CodeInternal, "failed to check rows affected", err)
+	}
+	if rows == 0 {
+		return shared.NewError(shared.CodeNotFound, "memory not found")
+	}
+	return nil
+}
+
+func (s *sqliteWorkflowStore) Delete(ctx context.Context, id shared.ID) error {
+	result, err := s.db.ExecContext(ctx, `DELETE FROM workflow WHERE id = ?`, id.String())
+	if err != nil {
+		return shared.Wrap(shared.CodeInternal, "failed to delete workflow", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return shared.Wrap(shared.CodeInternal, "failed to check rows affected", err)
+	}
+	if rows == 0 {
+		return shared.NewError(shared.CodeNotFound, "workflow not found")
+	}
+	return nil
+}
+
 func scanCheckpoint(rows *sql.Rows) (*checkpoint.Checkpoint, error) {
 	var (
 		id           string

@@ -24,4 +24,10 @@ type MemoryStore interface {
 	// GetByKey returns the memory matching key for the project.
 	// Returns CodeNotFound if no match exists.
 	GetByKey(ctx context.Context, projectID shared.ID, key string) (*memory.Memory, error)
+	// Update replaces the content of an existing memory identified by key.
+	// Returns CodeNotFound if no match exists.
+	Update(ctx context.Context, projectID shared.ID, key string, content string) error
+	// Delete removes the memory identified by key from the project.
+	// Returns CodeNotFound if no match exists.
+	Delete(ctx context.Context, projectID shared.ID, key string) error
 }

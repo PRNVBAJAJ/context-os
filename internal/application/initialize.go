@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/PRNVBAJAJ/context-os/internal/adapter"
 	"github.com/PRNVBAJAJ/context-os/internal/event"
 	"github.com/PRNVBAJAJ/context-os/internal/project"
 	"github.com/PRNVBAJAJ/context-os/internal/shared"
@@ -21,6 +22,14 @@ type InitOptions struct {
 	// Language is the primary programming language (e.g. "go", "python").
 	// Optional; an empty string is valid.
 	Language string
+	// NoInject disables automatic provider config injection when true.
+	NoInject bool
+}
+
+// InitResult is returned by InitializeProject.
+type InitResult struct {
+	Project   *project.Project
+	Providers []adapter.DetectionResult // empty when NoInject is true
 }
 
 // InitializeProject initializes a new Context OS project at opts.RootPath.
@@ -32,7 +41,8 @@ type InitOptions struct {
 //  4. Write project.yaml.
 //  5. Open SQLite at .context/runtime.db and run schema migrations.
 //  6. Persist the project record.
-func InitializeProject(ctx context.Context, opts InitOptions) (*project.Project, error) {
+//  7. Inject Context OS usage block into detected AI CLI tool configs (unless NoInject).
+func InitializeProject(ctx context.Context, opts InitOptions) (*InitResult, error) {
 	p, err := project.New(opts.Name, opts.RootPath, opts.Language)
 	if err != nil {
 		return nil, err
@@ -67,5 +77,16 @@ func InitializeProject(ctx context.Context, opts InitOptions) (*project.Project,
 		return nil, err
 	}
 
-	return p, nil
+	result := &InitResult{Project: p}
+
+	if !opts.NoInject {
+		for _, r := range adapter.Detect(opts.RootPath) {
+			if r.Detected && !r.Injected {
+				_ = adapter.Inject(opts.RootPath, r.Provider)
+			}
+		}
+		result.Providers = adapter.Detect(opts.RootPath)
+	}
+
+	return result, nil
 }

@@ -219,3 +219,37 @@ func ResumeWorkflow(ctx context.Context, opts ResumeWorkflowOptions) (*workflow.
 		transition: (*workflow.Workflow).Resume,
 	})
 }
+
+// DeleteWorkflowOptions carries parameters for the DeleteWorkflow use case.
+type DeleteWorkflowOptions struct {
+	RootPath string
+	IDPrefix string
+}
+
+// DeleteWorkflow removes a completed or failed workflow from the database.
+// It returns CodeInvalidInput if the workflow is still running or paused.
+func DeleteWorkflow(ctx context.Context, opts DeleteWorkflowOptions) error {
+	p, err := project.Load(opts.RootPath)
+	if err != nil {
+		return err
+	}
+
+	dbPath := filepath.Join(project.Dir(opts.RootPath), "runtime.db")
+	store, err := storage.Open(ctx, dbPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = store.Close() }()
+
+	w, err := resolveWorkflowByPrefix(ctx, store, p.ID, opts.IDPrefix)
+	if err != nil {
+		return err
+	}
+
+	if w.Status == workflow.StatusRunning || w.Status == workflow.StatusPaused {
+		return shared.NewError(shared.CodeInvalidInput,
+			fmt.Sprintf("cannot delete a %s workflow — use 'context workflow complete' or 'context workflow fail' first", w.Status))
+	}
+
+	return store.Workflows().Delete(ctx, w.ID)
+}
