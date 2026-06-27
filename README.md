@@ -12,24 +12,71 @@ AI Provider → execution engine
 
 ## Install
 
-### Homebrew (macOS / Linux)
+### macOS — Homebrew
 
 ```bash
-brew install context-os/tap/context
+brew tap PRNVBAJAJ/tap
+brew trust --formula PRNVBAJAJ/tap/context
+brew install PRNVBAJAJ/tap/context
 ```
 
-### Pre-built binaries
+> **Why `brew trust`?** Homebrew requires a one-time trust confirmation for third-party taps as a security measure. This is a per-machine step — you won't be prompted again after running it.
 
-Download the latest release for your platform from the [Releases](https://github.com/context-os/context-os/releases) page. Binaries are statically linked — no runtime dependencies.
+Verify the installation:
+
+```bash
+context --version
+```
+
+Upgrade to a new release:
+
+```bash
+brew upgrade context
+```
+
+---
+
+### Linux — Pre-built binary
+
+Download the latest `linux_amd64` or `linux_arm64` archive from the [Releases](https://github.com/PRNVBAJAJ/context-os/releases) page, then:
+
+```bash
+tar -xzf context_*_linux_amd64.tar.gz
+sudo mv context /usr/local/bin/context
+context --version
+```
+
+Or use a one-liner (replace the version and arch as needed):
+
+```bash
+curl -Lo context.tar.gz https://github.com/PRNVBAJAJ/context-os/releases/latest/download/context_0.1.1_linux_amd64.tar.gz
+tar -xzf context.tar.gz
+sudo mv context /usr/local/bin/context
+```
+
+---
+
+### Windows — Pre-built binary
+
+Download `context_*_windows_amd64.zip` from the [Releases](https://github.com/PRNVBAJAJ/context-os/releases) page, extract it, and place `context.exe` somewhere on your `PATH` (e.g. `C:\Program Files\context\`).
+
+Verify in PowerShell:
+
+```powershell
+context --version
+```
+
+---
 
 ### Build from source
 
 Requires Go 1.25+.
 
 ```bash
-git clone https://github.com/context-os/context-os
+git clone https://github.com/PRNVBAJAJ/context-os
 cd context-os
 make build          # produces bin/context
+sudo mv bin/context /usr/local/bin/context
 ```
 
 ## Quick start
