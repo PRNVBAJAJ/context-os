@@ -16,6 +16,7 @@ func newMemoryCommand() *cobra.Command {
 	}
 	cmd.AddCommand(newMemoryAddCommand())
 	cmd.AddCommand(newMemoryListCommand())
+	cmd.AddCommand(newMemoryShowCommand())
 	return cmd
 }
 
@@ -53,6 +54,35 @@ CONTENT is the knowledge body — use quotes for multi-word content.`,
 
 	cmd.Flags().StringVar(&title, "title", "", "Human-readable title (defaults to key)")
 	return cmd
+}
+
+func newMemoryShowCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "show <key>",
+		Short: "Show a single memory entry",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rootPath, err := discoverProjectRoot()
+			if err != nil {
+				return err
+			}
+
+			m, err := application.ShowMemory(cmd.Context(), application.ShowMemoryOptions{
+				RootPath: rootPath,
+				Key:      args[0],
+			})
+			if err != nil {
+				return err
+			}
+
+			w := cmd.OutOrStdout()
+			fmt.Fprintf(w, "Key:     %s\n", m.Key)
+			fmt.Fprintf(w, "Title:   %s\n", m.Title)
+			fmt.Fprintf(w, "Created: %s\n", m.CreatedAt.Format("2006-01-02T15:04Z"))
+			fmt.Fprintf(w, "\n%s\n", m.Content)
+			return nil
+		},
+	}
 }
 
 func newMemoryListCommand() *cobra.Command {

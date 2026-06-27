@@ -615,6 +615,40 @@ WHERE project_id = ?`
 	return checkpoints, nil
 }
 
+func (s *sqliteCheckpointStore) GetByID(ctx context.Context, id shared.ID) (*checkpoint.Checkpoint, error) {
+	row := s.db.QueryRowContext(ctx, `
+SELECT id, COALESCE(workflow_id, ''), note, created_at
+FROM checkpoint
+WHERE id = ?`, id.String())
+
+	var (
+		cpID         string
+		workflowID   string
+		note         string
+		createdAtStr string
+	)
+	err := row.Scan(&cpID, &workflowID, &note, &createdAtStr)
+	if err == sql.ErrNoRows {
+		return nil, shared.NewError(shared.CodeNotFound, "checkpoint not found")
+	}
+	if err != nil {
+		return nil, shared.Wrap(shared.CodeInternal, "failed to scan checkpoint row", err)
+	}
+	createdAt, err := time.Parse(time.RFC3339, createdAtStr)
+	if err != nil {
+		return nil, shared.Wrap(shared.CodeInternal, "failed to parse checkpoint created_at", err)
+	}
+	cp := &checkpoint.Checkpoint{
+		ID:        shared.ID(cpID),
+		Note:      note,
+		CreatedAt: createdAt.UTC(),
+	}
+	if workflowID != "" {
+		cp.WorkflowID = shared.ID(workflowID)
+	}
+	return cp, nil
+}
+
 func scanCheckpoint(rows *sql.Rows) (*checkpoint.Checkpoint, error) {
 	var (
 		id           string

@@ -21,4 +21,7 @@ type CheckpointStore interface {
 	Create(ctx context.Context, projectID shared.ID, cp *checkpoint.Checkpoint) error
 	// List returns checkpoints for the project ordered by created_at descending.
 	List(ctx context.Context, projectID shared.ID, filter CheckpointFilter) ([]*checkpoint.Checkpoint, error)
+	// GetByID returns the checkpoint with the given ID.
+	// Returns CodeNotFound if no match exists.
+	GetByID(ctx context.Context, id shared.ID) (*checkpoint.Checkpoint, error)
 }

@@ -75,3 +75,26 @@ func ListMemories(ctx context.Context, opts ListMemoriesOptions) ([]*memory.Memo
 
 	return store.Memories().List(ctx, p.ID, storage.MemoryFilter{})
 }
+
+// ShowMemoryOptions carries parameters for the ShowMemory use case.
+type ShowMemoryOptions struct {
+	RootPath string
+	Key      string
+}
+
+// ShowMemory returns a single memory entry by key.
+func ShowMemory(ctx context.Context, opts ShowMemoryOptions) (*memory.Memory, error) {
+	p, err := project.Load(opts.RootPath)
+	if err != nil {
+		return nil, err
+	}
+
+	dbPath := filepath.Join(project.Dir(opts.RootPath), "runtime.db")
+	store, err := storage.Open(ctx, dbPath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = store.Close() }()
+
+	return store.Memories().GetByKey(ctx, p.ID, opts.Key)
+}

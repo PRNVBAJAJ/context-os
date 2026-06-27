@@ -7,6 +7,19 @@ import (
 	"github.com/PRNVBAJAJ/context-os/internal/shared"
 )
 
+// contextGitignore is written to .context/.gitignore on init.
+// Volatile runtime files are ignored; human-readable files (memory, project.yaml)
+// remain committable so teams can share project knowledge if they choose.
+const contextGitignore = `# Context OS runtime files — do not commit
+runtime.db
+runtime.db-shm
+runtime.db-wal
+logs/
+cache/
+temp/
+sessions/
+`
+
 // ContextDir is the name of the runtime directory created inside every project root.
 const ContextDir = ".context"
 
@@ -55,6 +68,11 @@ func CreateLayout(rootPath string) error {
 		if err := os.MkdirAll(path, 0o755); err != nil {
 			return shared.Wrap(shared.CodeInternal, "failed to create subdirectory "+sub, err)
 		}
+	}
+
+	gitignorePath := filepath.Join(contextDir, ".gitignore")
+	if err := os.WriteFile(gitignorePath, []byte(contextGitignore), 0o644); err != nil {
+		return shared.Wrap(shared.CodeInternal, "failed to write .context/.gitignore", err)
 	}
 
 	return nil

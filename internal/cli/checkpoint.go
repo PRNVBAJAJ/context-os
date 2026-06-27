@@ -16,6 +16,7 @@ func newCheckpointCommand() *cobra.Command {
 	}
 	cmd.AddCommand(newCheckpointCreateCommand())
 	cmd.AddCommand(newCheckpointListCommand())
+	cmd.AddCommand(newCheckpointRestoreCommand())
 	return cmd
 }
 
@@ -92,6 +93,54 @@ func newCheckpointListCommand() *cobra.Command {
 				)
 			}
 			return tw.Flush()
+		},
+	}
+}
+
+func newCheckpointRestoreCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "restore <id>",
+		Short: "Show a checkpoint's recorded state",
+		Long: `Display the state captured at the time a checkpoint was created.
+
+In v0.1, restore surfaces the checkpoint note and associated workflow so you
+or your AI assistant can resume from exactly where work was recorded.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rootPath, err := discoverProjectRoot()
+			if err != nil {
+				return err
+			}
+
+			result, err := application.RestoreCheckpoint(cmd.Context(), application.RestoreCheckpointOptions{
+				RootPath: rootPath,
+				IDPrefix: args[0],
+			})
+			if err != nil {
+				return err
+			}
+
+			cp := result.Checkpoint
+			w := cmd.OutOrStdout()
+
+			fmt.Fprintf(w, "Checkpoint: %s\n", cp.ID.String()[:8])
+			fmt.Fprintf(w, "Created:    %s\n", cp.CreatedAt.Format("2006-01-02T15:04:05Z"))
+
+			if result.WorkflowName != "" {
+				fmt.Fprintf(w, "Workflow:   %s (%s)\n", result.WorkflowName, cp.WorkflowID.String()[:8])
+			} else {
+				fmt.Fprintf(w, "Workflow:   (project-level)\n")
+			}
+
+			if cp.Note != "" {
+				fmt.Fprintf(w, "\nState at checkpoint:\n  %s\n", cp.Note)
+			}
+
+			if !cp.WorkflowID.IsEmpty() {
+				fmt.Fprintf(w, "\nTo resume the associated workflow:\n  context workflow resume %s\n", cp.WorkflowID.String()[:8])
+			}
+
+			return nil
 		},
 	}
 }
