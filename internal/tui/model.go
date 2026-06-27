@@ -135,8 +135,9 @@ func (m Model) tabLen() int {
 			n = maxDashboardEvents
 		}
 		return n
+	default:
+		return 0
 	}
-	return 0
 }
 
 // View renders the dashboard. Returns an empty string once quitting to avoid
@@ -182,6 +183,8 @@ func (m Model) View() string {
 		m.renderProviders(&b)
 	case tabEvents:
 		m.renderEvents(&b)
+	default:
+		// tabCount is a sentinel, never a navigable tab.
 	}
 
 	// Footer
