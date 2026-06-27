@@ -74,7 +74,7 @@ changelog:
     - title: Other
       order: 999
 
-homebrew:
+brews:
   - name: context
     repository:
       owner: PRNVBAJAJ
