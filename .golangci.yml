@@ -10,16 +10,15 @@ linters:
     - bodyclose
     - noctx
     - exhaustive
-
-linters-settings:
-  errcheck:
-    # fmt.Fprint* writes to cobra stdout/stderr; I/O errors there are not actionable.
-    exclude-functions:
-      - fmt.Fprint
-      - fmt.Fprintf
-      - fmt.Fprintln
-  exhaustive:
-    default-signifies-exhaustive: true
+  settings:
+    errcheck:
+      # fmt.Fprint* writes to cobra stdout/stderr; I/O errors there are not actionable.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+    exhaustive:
+      default-signifies-exhaustive: true
 
 issues:
   exclude-rules:

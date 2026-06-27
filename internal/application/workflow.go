@@ -41,7 +41,7 @@ func StartWorkflow(ctx context.Context, opts StartWorkflowOptions) (*workflow.Wo
 	if err != nil {
 		return nil, err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	if err := store.Workflows().Create(ctx, p.ID, w); err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func ListWorkflows(ctx context.Context, opts ListWorkflowsOptions) ([]*workflow.
 	if err != nil {
 		return nil, err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	return store.Workflows().List(ctx, p.ID, storage.WorkflowFilter{})
 }
@@ -101,7 +101,7 @@ func transitionWorkflow(ctx context.Context, opts transitionWorkflowOptions) (*w
 	if err != nil {
 		return nil, err
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	w, err := resolveWorkflowByPrefix(ctx, store, p.ID, opts.IDPrefix)
 	if err != nil {
