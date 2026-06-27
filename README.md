@@ -79,6 +79,49 @@ make build          # produces bin/context
 sudo mv bin/context /usr/local/bin/context
 ```
 
+## How it works
+
+Context OS is not an AI assistant — it is the layer beneath one. Your AI assistant (Claude Code, Codex, Gemini CLI) does the actual work; Context OS gives that work a durable, portable structure.
+
+```
+You ──► AI Assistant ──► context workflow start / checkpoint / memory
+                              ↓
+                         .context/ (SQLite + Markdown)
+                              ↓
+         Next session, different provider, different machine
+                              ↓
+                    context status / tui / doctor
+                              ↑
+              Full picture without re-explaining anything
+```
+
+**Workflows are driven by your AI assistant, not by you.**
+
+The intended pattern is to instruct your assistant to call `context` commands as it works. For Claude Code, add this to your `CLAUDE.md`:
+
+```markdown
+## Context OS
+
+This project uses Context OS for durable state. Follow these rules on every task:
+
+- When starting a significant task, run:
+  `context workflow start "<task name>"`
+- When you reach a natural pause point or hand-off, run:
+  `context checkpoint create --note "<what is done, what is next>"`
+- When you learn something that should survive provider switches, run:
+  `context memory add <slug> "<decision or constraint>" --title "<title>"`
+- When the task is fully done, run:
+  `context workflow complete <id>`
+- When a task cannot be completed, run:
+  `context workflow fail <id>`
+- At the start of any session, orient yourself by running:
+  `context status && context workflow list && context memory list`
+```
+
+With this in place, Claude Code reads the project state at the start of every session and updates it as it works — automatically, without you having to remember to run any commands.
+
+**The value is provider independence.** If you start a task with Claude, hit a limit, and switch to Codex, Codex runs `context workflow list` and picks up exactly where Claude left off. No copy-pasting context. No re-explaining the codebase decisions. No lost state.
+
 ## Quick start
 
 ```bash
