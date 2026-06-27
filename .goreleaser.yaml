@@ -74,9 +74,23 @@ changelog:
     - title: Other
       order: 999
 
+brews:
+  - name: context
+    repository:
+      owner: PRNVBAJAJ
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/PRNVBAJAJ/context-os"
+    description: "Local-first runtime for AI-assisted engineering"
+    license: "MIT"
+    install: |
+      bin.install "context"
+    test: |
+      system "#{bin}/context", "--version"
+
 release:
   github:
-    owner: context-os
+    owner: PRNVBAJAJ
     name: context-os
   draft: false
   prerelease: auto
