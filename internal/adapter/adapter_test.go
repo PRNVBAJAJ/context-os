@@ -84,17 +84,58 @@ func TestInject_Claude_WritesHookFile(t *testing.T) {
 		t.Fatalf(".claude/settings.json not created: %v", err)
 	}
 	content := string(data)
-	if !strings.Contains(content, "context status") {
-		t.Error("hook command missing from settings.json")
+	if !strings.Contains(content, "NO ACTIVE WORKFLOW") {
+		t.Error("assertive UserPromptSubmit hook missing from settings.json")
 	}
 	if !strings.Contains(content, "UserPromptSubmit") {
 		t.Error("UserPromptSubmit key missing from settings.json")
+	}
+	if !strings.Contains(content, "checkpoint create") {
+		t.Error("Stop auto-checkpoint hook missing from settings.json")
+	}
+	if !strings.Contains(content, "Stop") {
+		t.Error("Stop key missing from settings.json")
 	}
 
 	// Must be valid JSON.
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Errorf("settings.json is not valid JSON: %v", err)
+	}
+}
+
+func TestInject_Claude_WritesStopHook(t *testing.T) {
+	dir := t.TempDir()
+	p := adapter.Provider{Name: "claude", Binary: "claude", ConfigPath: "CLAUDE.md"}
+
+	if err := adapter.Inject(dir, p); err != nil {
+		t.Fatalf("Inject: %v", err)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, ".claude", "settings.json"))
+	var raw struct {
+		Hooks map[string][]struct {
+			Hooks []struct {
+				Command string `json:"command"`
+			} `json:"hooks"`
+		} `json:"hooks"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("settings.json parse error: %v", err)
+	}
+	if len(raw.Hooks["Stop"]) == 0 {
+		t.Error("Stop hook array is empty")
+	}
+	found := false
+	for _, e := range raw.Hooks["Stop"] {
+		for _, h := range e.Hooks {
+			if strings.Contains(h.Command, "checkpoint create") {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("checkpoint create not found in any Stop hook command")
 	}
 }
 
@@ -121,9 +162,12 @@ func TestInject_Claude_HookMergesExistingSettings(t *testing.T) {
 	if !strings.Contains(content, "permissions") {
 		t.Error("existing 'permissions' key was lost during merge")
 	}
-	// Hook must be added.
-	if !strings.Contains(content, "context status") {
-		t.Error("hook command missing after merge")
+	// Both hooks must be added.
+	if !strings.Contains(content, "NO ACTIVE WORKFLOW") {
+		t.Error("UserPromptSubmit hook missing after merge")
+	}
+	if !strings.Contains(content, "checkpoint create") {
+		t.Error("Stop hook missing after merge")
 	}
 }
 

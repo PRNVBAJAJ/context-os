@@ -16,9 +16,14 @@ const (
 	claudeSettingsPath = ".claude/settings.json"
 
 	// claudeHookScript is injected as a UserPromptSubmit hook in .claude/settings.json.
-	// It runs before every Claude Code prompt, surfacing active workflows and memories
-	// so the AI cannot miss them even in long sessions.
-	claudeHookScript = "context status 2>/dev/null && echo '---' && context workflow list 2>/dev/null && echo '---' && context memory list 2>/dev/null || true"
+	// When a workflow is running it surfaces project state; when none is active it
+	// emits a hard requirement so the AI cannot proceed without starting one.
+	claudeHookScript = `if context workflow list 2>/dev/null | grep -q running; then context status 2>/dev/null && echo '---' && context workflow list 2>/dev/null && echo '---' && context memory list 2>/dev/null; else echo '⚠ NO ACTIVE WORKFLOW. You MUST run: context workflow start "<task name>" before doing anything.'; fi || true`
+
+	// claudeStopScript is injected as a Stop hook in .claude/settings.json.
+	// It auto-checkpoints after every Claude turn when a workflow is running,
+	// removing the AI's discretion over whether to checkpoint.
+	claudeStopScript = `context workflow list 2>/dev/null | grep -q running && context checkpoint create --note 'auto' 2>/dev/null || true`
 )
 
 // injectionBody is the Context OS usage block appended to provider config files.
@@ -185,14 +190,18 @@ func injectConfigFile(path string, p Provider) error {
 	return err
 }
 
-// isClaudeHookInjected reports whether .claude/settings.json already contains
-// the Context OS UserPromptSubmit hook.
+// isClaudeHookInjected reports whether .claude/settings.json contains both the
+// UserPromptSubmit (assertive) hook and the Stop (auto-checkpoint) hook.
 func isClaudeHookInjected(rootPath string) bool {
 	data, err := os.ReadFile(filepath.Join(rootPath, claudeSettingsPath))
-	return err == nil && strings.Contains(string(data), "context status")
+	if err != nil {
+		return false
+	}
+	s := string(data)
+	return strings.Contains(s, "NO ACTIVE WORKFLOW") && strings.Contains(s, "checkpoint create")
 }
 
-// injectClaudeHook writes or merges the UserPromptSubmit hook into
+// injectClaudeHook writes or merges the UserPromptSubmit and Stop hooks into
 // .claude/settings.json, preserving any existing settings.
 // It also ensures .claude/ is listed in the project's .gitignore so that
 // the file is never accidentally committed.
@@ -212,20 +221,18 @@ func injectClaudeHook(rootPath string) error {
 		_ = json.Unmarshal(data, &raw)
 	}
 
-	// Merge into the existing UserPromptSubmit array.
-	var existing []claudeHookEntry
+	// Parse existing hooks map.
+	hooksMap := make(map[string][]claudeHookEntry)
 	if raw["hooks"] != nil {
-		var hooksMap map[string][]claudeHookEntry
-		if err := json.Unmarshal(raw["hooks"], &hooksMap); err == nil {
-			existing = hooksMap["UserPromptSubmit"]
-		}
+		_ = json.Unmarshal(raw["hooks"], &hooksMap)
 	}
-	existing = append(existing, claudeHookEntry{
-		Matcher: "",
-		Hooks:   []claudeHook{{Type: "command", Command: claudeHookScript}},
-	})
 
-	hooksBytes, err := json.Marshal(map[string][]claudeHookEntry{"UserPromptSubmit": existing})
+	// Ensure UserPromptSubmit (assertive state display) and Stop (auto-checkpoint).
+	// upsertContextHook replaces any older Context OS entry rather than appending.
+	hooksMap["UserPromptSubmit"] = upsertContextHook(hooksMap["UserPromptSubmit"], claudeHookScript)
+	hooksMap["Stop"] = upsertContextHook(hooksMap["Stop"], claudeStopScript)
+
+	hooksBytes, err := json.Marshal(hooksMap)
 	if err != nil {
 		return err
 	}
@@ -243,6 +250,29 @@ func injectClaudeHook(rootPath string) error {
 	// that should not be shared — each developer gets their own hook on init.
 	_ = ensureGitignored(rootPath, ".claude/")
 	return nil
+}
+
+// upsertContextHook ensures exactly one Context OS entry exists for command.
+// If command is already present, it's a no-op. If an older Context OS entry
+// (identified by a "context " prefix) is found, it is replaced in-place.
+// Otherwise the entry is appended.
+func upsertContextHook(entries []claudeHookEntry, command string) []claudeHookEntry {
+	for i, e := range entries {
+		for j, h := range e.Hooks {
+			if h.Command == command {
+				return entries // already up to date
+			}
+			if strings.HasPrefix(h.Command, "context ") || strings.HasPrefix(h.Command, "if context ") {
+				// Old Context OS entry — upgrade in place.
+				entries[i].Hooks[j].Command = command
+				return entries
+			}
+		}
+	}
+	return append(entries, claudeHookEntry{
+		Matcher: "",
+		Hooks:   []claudeHook{{Type: "command", Command: command}},
+	})
 }
 
 // ensureGitignored appends pattern to <rootPath>/.gitignore if not already present.
