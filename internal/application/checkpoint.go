@@ -10,6 +10,7 @@ import (
 	"github.com/PRNVBAJAJ/context-os/internal/project"
 	"github.com/PRNVBAJAJ/context-os/internal/shared"
 	"github.com/PRNVBAJAJ/context-os/internal/storage"
+	wfPkg "github.com/PRNVBAJAJ/context-os/internal/workflow"
 )
 
 // CreateCheckpointOptions carries parameters for the CreateCheckpoint use case.
@@ -41,6 +42,18 @@ func CreateCheckpoint(ctx context.Context, opts CreateCheckpointOptions) (*check
 			return nil, err
 		}
 		workflowID = w.ID
+	} else {
+		// Auto-associate with the running workflow so summaries and filters work
+		// without requiring the caller to know the workflow ID.
+		workflows, err := store.Workflows().List(ctx, p.ID, storage.WorkflowFilter{})
+		if err == nil {
+			for _, w := range workflows {
+				if w.Status == wfPkg.StatusRunning {
+					workflowID = w.ID
+					break
+				}
+			}
+		}
 	}
 
 	cp := checkpoint.New(workflowID, opts.Note)
