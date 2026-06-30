@@ -120,7 +120,10 @@ func newWorkflowCompleteCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Workflow %q completed.\n", w.Name)
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "Workflow %q completed.\n", w.Name)
+			summaryPath := filepath.Join(".context", "workflows", string(w.ID)[:8]+"-summary.md")
+			fmt.Fprintf(out, "Session summary: %s\n", summaryPath)
 			return nil
 		},
 	}

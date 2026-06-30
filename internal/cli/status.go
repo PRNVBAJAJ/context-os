@@ -55,6 +55,12 @@ func newStatusCommand() *cobra.Command {
 					note,
 				)
 			}
+			if len(status.HotFiles) > 0 {
+				fmt.Fprintln(w, "Hot files:")
+				for _, f := range status.HotFiles {
+					fmt.Fprintf(w, "  %s (%dx)\n", f.Filepath, f.AccessCount)
+				}
+			}
 			return nil
 		},
 	}

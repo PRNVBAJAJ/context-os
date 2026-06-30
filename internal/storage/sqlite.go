@@ -65,6 +65,10 @@ func (s *sqliteStorage) Checkpoints() CheckpointStore {
 	return &sqliteCheckpointStore{db: s.db}
 }
 
+func (s *sqliteStorage) FileAccesses() FileAccessStore {
+	return &sqliteFileAccessStore{db: s.db}
+}
+
 func (s *sqliteStorage) Close() error {
 	return s.db.Close()
 }
@@ -727,4 +731,62 @@ func scanCheckpoint(rows *sql.Rows) (*checkpoint.Checkpoint, error) {
 		cp.WorkflowID = shared.ID(workflowID)
 	}
 	return cp, nil
+}
+
+// sqliteFileAccessStore implements FileAccessStore against the file_access table.
+type sqliteFileAccessStore struct {
+	db *sql.DB
+}
+
+func (s *sqliteFileAccessStore) Record(ctx context.Context, workflowID shared.ID, filepath string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO file_access (workflow_id, filepath, access_count, last_accessed_at)
+VALUES (?, ?, 1, ?)
+ON CONFLICT(workflow_id, filepath) DO UPDATE SET
+    access_count     = access_count + 1,
+    last_accessed_at = excluded.last_accessed_at`,
+		string(workflowID), filepath, now,
+	)
+	if err != nil {
+		return shared.Wrap(shared.CodeInternal, "failed to record file access", err)
+	}
+	return nil
+}
+
+func (s *sqliteFileAccessStore) HotFiles(ctx context.Context, workflowID shared.ID, limit int) ([]FileAccess, error) {
+	q := `SELECT workflow_id, filepath, access_count, last_accessed_at
+	      FROM file_access WHERE workflow_id = ?
+	      ORDER BY access_count DESC, last_accessed_at DESC`
+	args := []any{string(workflowID)}
+	if limit > 0 {
+		q += " LIMIT ?"
+		args = append(args, limit)
+	}
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, shared.Wrap(shared.CodeInternal, "failed to query hot files", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []FileAccess
+	for rows.Next() {
+		var wfID, fp, lastStr string
+		var count int
+		if err := rows.Scan(&wfID, &fp, &count, &lastStr); err != nil {
+			return nil, shared.Wrap(shared.CodeInternal, "failed to scan file_access row", err)
+		}
+		t, err := time.Parse(time.RFC3339, lastStr)
+		if err != nil {
+			return nil, shared.Wrap(shared.CodeInternal, "failed to parse last_accessed_at", err)
+		}
+		out = append(out, FileAccess{
+			WorkflowID:  shared.ID(wfID),
+			Filepath:    fp,
+			AccessCount: count,
+			LastAccess:  t.UTC(),
+		})
+	}
+	return out, rows.Err()
 }

@@ -96,6 +96,19 @@ CREATE TABLE IF NOT EXISTS checkpoint (
 CREATE INDEX IF NOT EXISTS idx_checkpoint_project  ON checkpoint(project_id);
 CREATE INDEX IF NOT EXISTS idx_checkpoint_workflow ON checkpoint(workflow_id);`,
 	},
+	{
+		version: 5,
+		sql: `
+CREATE TABLE IF NOT EXISTS file_access (
+    workflow_id     TEXT    NOT NULL,
+    filepath        TEXT    NOT NULL,
+    access_count    INTEGER NOT NULL DEFAULT 1,
+    last_accessed_at TEXT   NOT NULL,
+    PRIMARY KEY (workflow_id, filepath)
+);
+
+CREATE INDEX IF NOT EXISTS idx_file_access_workflow ON file_access(workflow_id);`,
+	},
 }
 
 // runMigrations applies any migrations that have not yet been recorded in the

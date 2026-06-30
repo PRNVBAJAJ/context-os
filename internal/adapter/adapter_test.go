@@ -96,6 +96,12 @@ func TestInject_Claude_WritesHookFile(t *testing.T) {
 	if !strings.Contains(content, "Stop") {
 		t.Error("Stop key missing from settings.json")
 	}
+	if !strings.Contains(content, "context track") {
+		t.Error("PostToolUse file-tracking hook missing from settings.json")
+	}
+	if !strings.Contains(content, "PostToolUse") {
+		t.Error("PostToolUse key missing from settings.json")
+	}
 
 	// Must be valid JSON.
 	var raw map[string]any
@@ -162,12 +168,15 @@ func TestInject_Claude_HookMergesExistingSettings(t *testing.T) {
 	if !strings.Contains(content, "permissions") {
 		t.Error("existing 'permissions' key was lost during merge")
 	}
-	// Both hooks must be added.
+	// All three hooks must be added.
 	if !strings.Contains(content, "NO ACTIVE WORKFLOW") {
 		t.Error("UserPromptSubmit hook missing after merge")
 	}
 	if !strings.Contains(content, "checkpoint create") {
 		t.Error("Stop hook missing after merge")
+	}
+	if !strings.Contains(content, "context track") {
+		t.Error("PostToolUse hook missing after merge")
 	}
 }
 

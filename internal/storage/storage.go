@@ -20,6 +20,8 @@ type Storage interface {
 	Workflows() WorkflowStore
 	// Checkpoints returns the append-only store for recovery snapshots.
 	Checkpoints() CheckpointStore
+	// FileAccesses returns the store for per-workflow file access tracking.
+	FileAccesses() FileAccessStore
 	// Close releases the database connection.
 	Close() error
 }

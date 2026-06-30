@@ -24,6 +24,11 @@ const (
 	// It auto-checkpoints after every Claude turn when a workflow is running,
 	// removing the AI's discretion over whether to checkpoint.
 	claudeStopScript = `context workflow list 2>/dev/null | grep -q running && context checkpoint create --note 'auto' 2>/dev/null || true`
+
+	// claudePostToolUseScript is injected as a PostToolUse hook in .claude/settings.json.
+	// It silently records every file touched by Read/Edit/Write tools so that
+	// `context status` can surface hot files without manual tracking.
+	claudePostToolUseScript = `cat | context track 2>/dev/null || true`
 )
 
 // injectionBody is the Context OS usage block appended to provider config files.
@@ -190,15 +195,17 @@ func injectConfigFile(path string, p Provider) error {
 	return err
 }
 
-// isClaudeHookInjected reports whether .claude/settings.json contains both the
-// UserPromptSubmit (assertive) hook and the Stop (auto-checkpoint) hook.
+// isClaudeHookInjected reports whether .claude/settings.json contains all three
+// Context OS hooks: UserPromptSubmit, Stop, and PostToolUse.
 func isClaudeHookInjected(rootPath string) bool {
 	data, err := os.ReadFile(filepath.Join(rootPath, claudeSettingsPath))
 	if err != nil {
 		return false
 	}
 	s := string(data)
-	return strings.Contains(s, "NO ACTIVE WORKFLOW") && strings.Contains(s, "checkpoint create")
+	return strings.Contains(s, "NO ACTIVE WORKFLOW") &&
+		strings.Contains(s, "checkpoint create") &&
+		strings.Contains(s, "context track")
 }
 
 // injectClaudeHook writes or merges the UserPromptSubmit and Stop hooks into
@@ -227,10 +234,10 @@ func injectClaudeHook(rootPath string) error {
 		_ = json.Unmarshal(raw["hooks"], &hooksMap)
 	}
 
-	// Ensure UserPromptSubmit (assertive state display) and Stop (auto-checkpoint).
-	// upsertContextHook replaces any older Context OS entry rather than appending.
+	// Ensure all three Context OS hooks are present, replacing older entries.
 	hooksMap["UserPromptSubmit"] = upsertContextHook(hooksMap["UserPromptSubmit"], claudeHookScript)
 	hooksMap["Stop"] = upsertContextHook(hooksMap["Stop"], claudeStopScript)
+	hooksMap["PostToolUse"] = upsertContextHook(hooksMap["PostToolUse"], claudePostToolUseScript)
 
 	hooksBytes, err := json.Marshal(hooksMap)
 	if err != nil {

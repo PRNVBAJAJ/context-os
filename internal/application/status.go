@@ -16,6 +16,7 @@ type ProjectStatus struct {
 	ActiveWorkflow *workflow.Workflow
 	MemoryCount    int
 	LastCheckpoint *checkpoint.Checkpoint
+	HotFiles       []HotFile // top files touched in the active workflow
 }
 
 // GetProjectStatus loads the project metadata and runtime state for rootPath.
@@ -60,6 +61,17 @@ func GetProjectStatus(ctx context.Context, rootPath string) (*ProjectStatus, err
 	}
 	if len(checkpoints) > 0 {
 		status.LastCheckpoint = checkpoints[len(checkpoints)-1]
+	}
+
+	// Hot files for the active workflow (top 5).
+	if status.ActiveWorkflow != nil {
+		raw, _ := store.FileAccesses().HotFiles(ctx, status.ActiveWorkflow.ID, 5)
+		for _, r := range raw {
+			status.HotFiles = append(status.HotFiles, HotFile{
+				Filepath:    r.Filepath,
+				AccessCount: r.AccessCount,
+			})
+		}
 	}
 
 	return status, nil

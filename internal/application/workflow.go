@@ -3,8 +3,10 @@ package application
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/PRNVBAJAJ/context-os/internal/event"
 	"github.com/PRNVBAJAJ/context-os/internal/project"
@@ -162,14 +164,77 @@ type CompleteWorkflowOptions struct {
 	IDPrefix string
 }
 
-// CompleteWorkflow transitions a running workflow to completed.
+// CompleteWorkflow transitions a running workflow to completed and writes a
+// session summary to .context/workflows/<id>-summary.md.
 func CompleteWorkflow(ctx context.Context, opts CompleteWorkflowOptions) (*workflow.Workflow, error) {
-	return transitionWorkflow(ctx, transitionWorkflowOptions{
+	w, err := transitionWorkflow(ctx, transitionWorkflowOptions{
 		RootPath:   opts.RootPath,
 		IDPrefix:   opts.IDPrefix,
 		eventType:  event.TypeWorkflowCompleted,
 		transition: (*workflow.Workflow).Complete,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Write session summary — best-effort, never fails the command.
+	_ = writeWorkflowSummary(ctx, opts.RootPath, w)
+	return w, nil
+}
+
+// writeWorkflowSummary persists a Markdown summary of all checkpoint notes for w.
+func writeWorkflowSummary(ctx context.Context, rootPath string, w *workflow.Workflow) error {
+	dbPath := filepath.Join(project.Dir(rootPath), "runtime.db")
+	store, err := storage.Open(ctx, dbPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = store.Close() }()
+
+	p, err := store.Projects().GetByPath(ctx, rootPath)
+	if err != nil {
+		return err
+	}
+
+	cps, err := store.Checkpoints().List(ctx, p.ID, storage.CheckpointFilter{
+		WorkflowID: w.ID,
+	})
+	if err != nil {
+		return err
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "# Workflow: %s\n", w.Name)
+	fmt.Fprintf(&sb, "ID: %s\n", string(w.ID)[:8])
+	if w.CompletedAt != nil {
+		fmt.Fprintf(&sb, "Completed: %s\n", w.CompletedAt.UTC().Format(time.RFC3339))
+	}
+	sb.WriteString("\n## Checkpoint Notes\n\n")
+
+	if len(cps) == 0 {
+		sb.WriteString("_(no checkpoints recorded)_\n")
+	} else {
+		// List is descending; reverse for chronological order.
+		for i := len(cps) - 1; i >= 0; i-- {
+			cp := cps[i]
+			note := cp.Note
+			if note == "" {
+				note = "(no note)"
+			}
+			fmt.Fprintf(&sb, "%d. **%s** — %s\n",
+				len(cps)-i,
+				cp.CreatedAt.UTC().Format("2006-01-02T15:04Z"),
+				note,
+			)
+		}
+	}
+
+	dir := filepath.Join(project.Dir(rootPath), "workflows")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	summaryPath := filepath.Join(dir, string(w.ID)[:8]+"-summary.md")
+	return os.WriteFile(summaryPath, []byte(sb.String()), 0o644)
 }
 
 // FailWorkflowOptions carries parameters for FailWorkflow.

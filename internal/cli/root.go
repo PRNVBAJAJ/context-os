@@ -35,6 +35,7 @@ It is not a coding assistant. It is the operating system beneath them.`,
 	cmd.AddCommand(newCheckpointCommand())
 	cmd.AddCommand(newProvidersCommand())
 	cmd.AddCommand(newTuiCommand())
+	cmd.AddCommand(newTrackCommand())
 
 	return cmd
 }

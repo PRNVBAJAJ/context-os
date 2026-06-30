@@ -8,6 +8,48 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func newMemorySuggestCommand() *cobra.Command {
+	var topN int
+	cmd := &cobra.Command{
+		Use:   "suggest",
+		Short: "Suggest memory entries based on recurring checkpoint note patterns",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			rootPath, err := discoverProjectRoot()
+			if err != nil {
+				return err
+			}
+
+			suggestions, err := application.SuggestMemories(cmd.Context(), application.SuggestMemoriesOptions{
+				RootPath: rootPath,
+				TopN:     topN,
+			})
+			if err != nil {
+				return err
+			}
+
+			w := cmd.OutOrStdout()
+			if len(suggestions) == 0 {
+				fmt.Fprintln(w, "No suggestions yet — add more checkpoints with detailed notes.")
+				return nil
+			}
+
+			fmt.Fprintf(w, "Suggested memory entries (run 'context memory add <key> <content>' to save):\n\n")
+			tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(tw, "PHRASE\tSEEN IN\tEXAMPLE NOTE")
+			for _, s := range suggestions {
+				example := s.ExampleNote
+				if len(example) > 55 {
+					example = example[:52] + "..."
+				}
+				fmt.Fprintf(tw, "%s\t%d checkpoints\t%s\n", s.Phrase, s.Occurrences, example)
+			}
+			return tw.Flush()
+		},
+	}
+	cmd.Flags().IntVar(&topN, "top", 10, "Maximum number of suggestions to show")
+	return cmd
+}
+
 func newMemoryCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "memory",
@@ -19,6 +61,7 @@ func newMemoryCommand() *cobra.Command {
 	cmd.AddCommand(newMemoryShowCommand())
 	cmd.AddCommand(newMemoryUpdateCommand())
 	cmd.AddCommand(newMemoryDeleteCommand())
+	cmd.AddCommand(newMemorySuggestCommand())
 	return cmd
 }
 
